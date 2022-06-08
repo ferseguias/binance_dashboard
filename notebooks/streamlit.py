@@ -2,6 +2,10 @@ import streamlit as st
 import pandas as pd
 import finac as f
 
+#located in .py file
+#pipenv shell
+#streamlit run myfile.py
+
 st.sidebar.title("""Python accounting CRM""")
 
 options = st.sidebar.selectbox("Welcome, let's get started! What would you like to do?", ["How does it work", "Add new account", "View all accounts"])
