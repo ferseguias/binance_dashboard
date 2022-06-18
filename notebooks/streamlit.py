@@ -1,3 +1,4 @@
+from tkinter import colorchooser
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -5,6 +6,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import warnings
 warnings.filterwarnings('ignore')
+plt.style.use('dark_background')
 
 #located in .py file
 #streamlit run myfile.py
@@ -22,7 +24,7 @@ df_hist_prices = pd.read_excel('../database/prices/historical_prices.xlsx')
 df_hist_prices.set_index('datetime', inplace=True)
 
 #streamlit code
-st.sidebar.title("""Choose your wallet""")
+st.sidebar.title("""YOUR BINANCE ACCOUNT""")
 
 options = st.sidebar.selectbox("Choose your wallet", ["All accounts", "Spot", "Futures", "Card"])
 
@@ -93,7 +95,7 @@ if options == 'All accounts':
     join['total_value'] = -join.sum(axis=1)
     join['total_value_accum'] = join['total_value'].cumsum()
 
-    fig = plt.figure(figsize=(12, 6))
+    fig = plt.figure(figsize=(12, 3))
     sns.lineplot(x='year_month', y='total_value_accum', data=join)
     st.pyplot(fig)
 
@@ -106,109 +108,192 @@ if options == 'All accounts':
     account_activity = account_activity.groupby('UTC_Time').count()
     account_activity.reset_index(inplace=True)
 
-    fig = plt.figure(figsize=(12, 6))
+    fig = plt.figure(figsize=(12, 3))
     sns.barplot(x='UTC_Time', y='Change', data=account_activity)
     plt.ylabel('Transaction_count');
 
     st.pyplot(fig)
 
 elif options == 'Spot':
-    #spot balance per coin, enhanced with a current price in USDT
-    df_spot = df.loc[df['Account'] == 'Spot']
-    balance_spot = df_spot.groupby('Coin').sum()['Change']
-    holding_prices = []
-    for i in balance_spot.index:
-        if i == 'USDT':
-            holding_prices.append(1)
-        else:
-            try:
-                price = df_current_prices.loc[df_current_prices['symbol'] == (i + 'USDT')]['price'].values[0]
-                holding_prices.append(price)
-            except:
-                holding_prices.append(np.nan)
-    balance_spot = pd.DataFrame(balance_spot)
-    balance_spot['USDT_price'] = holding_prices
-    balance_spot['USDT_value'] = holding_prices * balance_spot['Change']
-    print(f'current total value: {round(balance_spot["USDT_value"].sum(), 2)} USDT')
-    balance_spot.sort_values(by='USDT_value', ascending=False, inplace=True)
-    balance_spot = balance_spot.loc[balance_spot['USDT_value'] > 1]
-    
-    col1, col2 = st.columns([2, 2])
-    
-    col1.subheader("Spot balance per coin")
-    col1.write("(top 10 showed)")
-    col1.table(balance_spot.head(10))
 
-    col2.subheader("Spot account pie chart")
+    spot_options = st.sidebar.selectbox("Choose report type", ["Spot overview", "Trades"])
 
-    pie = balance_spot.reset_index()
-    pie['percentage'] = pie['USDT_value'] / pie['USDT_value'].sum()
-    pie = pie.drop(['Change', 'USDT_price', 'USDT_value'], axis=1)
-    others = pie.loc[pie['percentage'] < 0.015]
-    pie.drop(others.index, inplace=True)
-    others = {'Coin':'others', 'percentage': others['percentage'].sum()}
-    pie = pie.append(others, ignore_index=True)
+    if spot_options == 'Spot overview':
 
-    fig = plt.figure(figsize=(20, 20))
-    plt.pie(pie['percentage'], labels=pie['Coin'], autopct='%1.1f%%')
-
-    col2.write("(relevant balances)")
-    col2.pyplot(fig)
-    
-    st.write("### Select a coin to plot historic buy/sell orders")
-
-    #get trade related operations
-    trades = df.loc[((df['Operation'] == 'Buy')) | ((df['Operation'] == 'Sell')) | ((df['Operation'] == 'Large OTC trading')) | ((df['Operation'] == 'Small assets exchange BNB')) | ((df['Operation'] == 'Transaction Related'))]
-    #separate columns for buy and sell and cut time from datetime
-    trades['buy'] = trades['Change'].apply(lambda x: x if x > 0 else np.nan)
-    trades['sell'] = trades['Change'].apply(lambda x: x if x < 0 else np.nan)
-    trades['UTC_Time'] = trades['UTC_Time'].apply(lambda x: x.strftime('%Y-%m-%d'))
-    trades = trades[['UTC_Time', 'buy', 'sell', 'Coin']].set_index('UTC_Time').sort_values(by=['Coin', 'buy'])
-    #delete duplicated dates
-    trades = trades.reset_index().groupby(['UTC_Time', 'Coin']).agg({'buy': 'sum', 'sell': 'sum'}).reset_index().sort_values(by=['Coin', 'UTC_Time'])
-    trades = trades.replace(0,np.nan)
-    trades['UTC_Time'] = pd.to_datetime(trades['UTC_Time'])
-    trades.set_index('UTC_Time', inplace=True)
-
-    #integrate historical prices with trades
-    for i in trades['Coin'].unique():
-        buy_name = i + '_buy'
-        sell_name = i + '_sell'
-        temp = trades.loc[trades['Coin'] == i]
-        temp[buy_name] = temp['buy']
-        temp[sell_name] = temp['sell']
-        temp.drop(['Coin', 'buy', 'sell'], axis=1, inplace=True)
-        df_hist_prices = pd.merge(df_hist_prices, temp, how='outer', left_index=True, right_index=True)
-
-    #plot trades and prices (input coin name)
-    def plot_trades(df, coin):
-
-        price_name = coin + 'USDT'
-        buy_name = coin + '_buy'
-        sell_name = coin + '_sell'
-
-        temp = df_hist_prices[[price_name, buy_name, sell_name]]
-        temp = temp.loc[(temp[buy_name] > 0) | (temp[sell_name] < 0)]
-
-        temp[buy_name] = temp[buy_name].apply(lambda x: 1 if x > 0 else np.nan)
-        temp[sell_name] = temp[sell_name].apply(lambda x: 1 if x < 0 else np.nan)
-        temp[buy_name] = temp[buy_name] * temp[price_name]
-        temp[sell_name] = temp[sell_name] * temp[price_name]
-
-        fig = plt.figure(figsize=(12, 6))
-        sns.lineplot(x=df.index, y=price_name, data=df, color='blue')
-        sns.lineplot(x=temp.index, y=buy_name, data=temp, color='g', marker='o', label='buy', linestyle='')
-        sns.lineplot(x=temp.index, y=sell_name, data=temp, color='r', marker='o', label='sell', linestyle='');
-        plt.legend()
-        st.pyplot(fig)
+        #spot balance per coin, enhanced with a current price in USDT
+        df_spot = df.loc[df['Account'] == 'Spot']
+        balance_spot = df_spot.groupby('Coin').sum()['Change']
+        holding_prices = []
+        for i in balance_spot.index:
+            if i == 'USDT':
+                holding_prices.append(1)
+            else:
+                try:
+                    price = df_current_prices.loc[df_current_prices['symbol'] == (i + 'USDT')]['price'].values[0]
+                    holding_prices.append(price)
+                except:
+                    holding_prices.append(np.nan)
+        balance_spot = pd.DataFrame(balance_spot)
+        balance_spot['USDT_price'] = holding_prices
+        balance_spot['USDT_value'] = holding_prices * balance_spot['Change']
+        print(f'current total value: {round(balance_spot["USDT_value"].sum(), 2)} USDT')
+        balance_spot.sort_values(by='USDT_value', ascending=False, inplace=True)
+        balance_spot = balance_spot.loc[balance_spot['USDT_value'] > 1]
         
-    coins_traded = list(trades.reset_index()['Coin'].unique())
-    x_axis = st.selectbox("Choose a coin", (["Choose a coin"] + coins_traded) )
+        col1, col2 = st.columns([2, 2])
+        
+        col1.subheader("Spot balance per coin")
+        col1.write("(top 10 showed)")
+        col1.table(balance_spot.head(10))
 
-    if  x_axis == "Choose a coin":    
-            st.write("Please choose a coin from the list")
-    else:
-        plot_trades(df_hist_prices, x_axis)
+        col2.subheader("Spot account pie chart")
+
+        pie = balance_spot.reset_index()
+        pie['percentage'] = pie['USDT_value'] / pie['USDT_value'].sum()
+        pie = pie.drop(['Change', 'USDT_price', 'USDT_value'], axis=1)
+        others = pie.loc[pie['percentage'] < 0.015]
+        pie.drop(others.index, inplace=True)
+        others = {'Coin':'others', 'percentage': others['percentage'].sum()}
+        pie = pie.append(others, ignore_index=True)
+
+        fig = plt.figure(figsize=(20, 20))
+        plt.pie(pie['percentage'], autopct='%1.1f%%', textprops={'fontsize': 35, 'fontweight': 'bold'}, startangle=90, pctdistance=1.2)
+        plt.legend(loc='upper left', labels=pie['Coin'], bbox_to_anchor=(-0.1, 1.1), fontsize=35)
+
+        col2.write("(coins with less than 1.5% share is shown as 'others')")
+        col2.pyplot(fig)
+
+        #number of total trades
+        df_spot = df.loc[df['Account'] == 'Spot']
+        balance_spot = df_spot.groupby('Coin').sum()['Change']
+        total_trades = df_spot[df_spot['Operation'].isin(['Buy', 'Large OTC Trading', 'Sell', 'Small assets exchange BNB', 'Transaction Related'])]
+        total_trades = total_trades.groupby('UTC_Time').agg({'Operation': 'count'}).reset_index()
+        total_trades['Operation'] = 1
+        total_trades = total_trades['Operation'].sum()
+        st.write(f"You've made total of {total_trades} trades in your spot account.")
+    
+    elif spot_options == 'Trades':
+
+        st.write("### Trades analysis")
+
+        #get trade related operations
+        trades = df.loc[((df['Operation'] == 'Buy')) | ((df['Operation'] == 'Sell')) | ((df['Operation'] == 'Large OTC trading')) | ((df['Operation'] == 'Small assets exchange BNB')) | ((df['Operation'] == 'Transaction Related'))]
+        #separate columns for buy and sell and cut time from datetime
+        trades['buy'] = trades['Change'].apply(lambda x: x if x > 0 else np.nan)
+        trades['sell'] = trades['Change'].apply(lambda x: x if x < 0 else np.nan)
+        trades['UTC_Time'] = trades['UTC_Time'].apply(lambda x: x.strftime('%Y-%m-%d'))
+        trades = trades[['UTC_Time', 'buy', 'sell', 'Coin']].set_index('UTC_Time').sort_values(by=['Coin', 'buy'])
+        #delete duplicated dates
+        trades = trades.reset_index().groupby(['UTC_Time', 'Coin']).agg({'buy': 'sum', 'sell': 'sum'}).reset_index().sort_values(by=['Coin', 'UTC_Time'])
+        trades = trades.replace(0,np.nan)
+        trades['UTC_Time'] = pd.to_datetime(trades['UTC_Time'])
+        trades.set_index('UTC_Time', inplace=True)
+
+        #integrate historical prices with trades
+        for i in trades['Coin'].unique():
+            buy_name = i + '_buy'
+            sell_name = i + '_sell'
+            temp = trades.loc[trades['Coin'] == i]
+            temp[buy_name] = temp['buy']
+            temp[sell_name] = temp['sell']
+            temp.drop(['Coin', 'buy', 'sell'], axis=1, inplace=True)
+            df_hist_prices = pd.merge(df_hist_prices, temp, how='outer', left_index=True, right_index=True)
+
+        #plot trades and prices (input coin name)
+        def plot_trades(df, coin):
+            if coin == 'USDT':
+                st.write("USDT trades do not generate plot as exchange ratio is 1.")
+            else:
+                price_name = coin + 'USDT'
+                buy_name = coin + '_buy'
+                sell_name = coin + '_sell'
+
+                temp = df_hist_prices[[price_name, buy_name, sell_name]]
+                temp = temp.loc[(temp[buy_name] > 0) | (temp[sell_name] < 0)]
+
+                temp[buy_name] = temp[buy_name].apply(lambda x: 1 if x > 0 else np.nan)
+                temp[sell_name] = temp[sell_name].apply(lambda x: 1 if x < 0 else np.nan)
+                temp[buy_name] = temp[buy_name] * temp[price_name]
+                temp[sell_name] = temp[sell_name] * temp[price_name]
+
+                fig = plt.figure(figsize=(12, 3))
+                sns.lineplot(x=df.index, y=price_name, data=df, color='white')
+                sns.lineplot(x=temp.index, y=buy_name, data=temp, color='g', marker='o',   label='buy', linestyle='', markersize=10)
+                sns.lineplot(x=temp.index, y=sell_name, data=temp, color='r', marker='o', label='sell', linestyle='', markersize=10);
+                plt.legend()
+                st.pyplot(fig)
+
+        coins_traded = list(trades.reset_index()['Coin'].unique())
+        x_axis = st.selectbox("Select a coin to plot historic buy/sell orders", (["Choose a coin"] + coins_traded) )
+
+        if  x_axis == "Choose a coin":    
+                st.write("Please choose a coin from the list above...")
+        else:
+            plot_trades(df_hist_prices, x_axis)
+
+        if x_axis == "Choose a coin":
+            pass
+        else:
+            st.write("""### Trade transactions performed on the selected coin""")
+            st.write("Explanation: results are based on selected coin. Dataset below shows all trades performed including amount traded, accumulated holding, transaction price in USDT***, amount paid in USDT and total investment in USDT.")
+                        
+            if x_axis == "USDT":
+                trades_coin = trades.loc[trades['Coin'] == x_axis].reset_index()
+                trades_coin = trades_coin.fillna(0)
+                trades_coin['amount_traded'] = trades_coin['buy'] + trades_coin['sell']
+                trades_coin.drop(['buy', 'sell'], axis=1, inplace=True)
+                trades_coin['UTC_Time'] = trades_coin['UTC_Time'].apply(lambda x: x.strftime('%Y-%m-%d'))
+                trades_coin['buy_sell'] = trades_coin['amount_traded'].apply(lambda x: "buy" if x > 0 else "sell")
+                trades_coin['accum_balance'] = trades_coin['amount_traded'].cumsum()
+                trades_coin = trades_coin.reindex(columns=['UTC_Time', 'Coin', 'buy_sell', 'amount_traded', 'accum_balance'])
+                trades_coin['trade_USDT'] = trades_coin['amount_traded']
+                trades_coin['accum_inv_USDT'] = trades_coin['trade_USDT'].cumsum()
+            elif x_axis == "WETH":
+                trades_coin = trades.loc[trades['Coin'] == x_axis].reset_index()
+                trades_coin = trades_coin.fillna(0)
+                trades_coin['amount_traded'] = trades_coin['buy'] + trades_coin['sell']
+                trades_coin.drop(['buy', 'sell'], axis=1, inplace=True)
+                trades_coin['UTC_Time'] = trades_coin['UTC_Time'].apply(lambda x: x.strftime('%Y-%m-%d'))
+                trades_coin['buy_sell'] = trades_coin['amount_traded'].apply(lambda x: "buy" if x > 0 else "sell")
+                trades_coin['accum_balance'] = trades_coin['amount_traded'].cumsum()
+                trades_coin = trades_coin.reindex(columns=['UTC_Time', 'Coin', 'buy_sell', 'amount_traded', 'accum_balance'])
+                trade_price = pd.DataFrame(df_hist_prices.loc[trades_coin['UTC_Time'].unique(), ('ETH' + 'USDT')])
+                trade_price.reset_index(inplace=True)
+                trades_coin['price'] = trade_price[('ETH' + 'USDT')]
+                trades_coin['trade_USDT'] = trades_coin['amount_traded'] * trades_coin['price']
+                trades_coin['accum_inv_USDT'] = trades_coin['trade_USDT'].cumsum()
+            else:
+                trades_coin = trades.loc[trades['Coin'] == x_axis].reset_index()
+                trades_coin = trades_coin.fillna(0)
+                trades_coin['amount_traded'] = trades_coin['buy'] + trades_coin['sell']
+                trades_coin.drop(['buy', 'sell'], axis=1, inplace=True)
+                trades_coin['UTC_Time'] = trades_coin['UTC_Time'].apply(lambda x: x.strftime('%Y-%m-%d'))
+                trades_coin['buy_sell'] = trades_coin['amount_traded'].apply(lambda x: "buy" if x > 0 else "sell")
+                trades_coin['accum_balance'] = trades_coin['amount_traded'].cumsum()
+                trades_coin = trades_coin.reindex(columns=['UTC_Time', 'Coin', 'buy_sell', 'amount_traded', 'accum_balance'])
+                trade_price = pd.DataFrame(df_hist_prices.loc[trades_coin['UTC_Time'].unique(), (x_axis + 'USDT')])
+                trade_price.reset_index(inplace=True)
+                trades_coin['price'] = trade_price[(x_axis + 'USDT')]
+                trades_coin['trade_USDT'] = trades_coin['amount_traded'] * trades_coin['price']
+                trades_coin['accum_inv_USDT'] = trades_coin['trade_USDT'].cumsum()
+
+            st.table(trades_coin)
+            
+            if x_axis == "WETH":
+                holding_value = df_current_prices.loc[df_current_prices['symbol'] == ('ETH' + 'USDT')].iloc[-1,-1] * trades_coin['accum_balance'].iloc[-1]
+                st.write(f'{x_axis} trading holding current value = {int(holding_value)} USDT')
+                profit_loss_trade = holding_value - trades_coin['accum_inv_USDT'].iloc[-1]
+                st.write(f'BTC trading profit/(loss) = {int(profit_loss_trade)} USDT')
+            elif x_axis == "USDT":
+                holding_value = trades_coin['accum_balance'].iloc[-1]
+                st.write(f'{x_axis} trading holding current value = {int(holding_value)} USDT')
+                profit_loss_trade = holding_value - trades_coin['accum_inv_USDT'].iloc[-1]
+                st.write(f'{x_axis} trading profit/(loss) = {int(profit_loss_trade)} USDT')
+            else:            
+                holding_value = df_current_prices.loc[df_current_prices['symbol'] == (x_axis + 'USDT')].iloc[-1,-1] * trades_coin['accum_balance'].iloc[-1]
+                st.write(f'{x_axis} trading holding current value = {int(holding_value)} USDT')
+                profit_loss_trade = holding_value - trades_coin['accum_inv_USDT'].iloc[-1]
+                st.write(f'{x_axis} trading profit/(loss) = {int(profit_loss_trade)} USDT')
 
 elif options == 'Futures':
     st.write("### Futures account overview")
@@ -272,7 +357,7 @@ elif options == 'Futures':
     join_inv['total_value_accum'] = join_inv['total_value'].cumsum()
 
     #plot monthly futures account value in USDT and investment in USDT
-    fig = plt.figure(figsize=(12, 6))
+    fig = plt.figure(figsize=(12, 3))
     sns.lineplot(x=join.index, y='total_value_accum', data=join, label = 'total futures value accum in USDT')
     sns.lineplot(x=join_inv.index, y='total_value_accum', data=join_inv, label = 'total futures funding accum in USDT')
 
@@ -286,15 +371,15 @@ elif options == 'Futures':
     
     if p_l[-1] > 0:
         st.write(f"You've made {int(p_l[-1])} USDT of profit in futures account")
-        fig = plt.figure(figsize=(12, 6))
+        fig = plt.figure(figsize=(12, 3))
         sns.lineplot(x=p_l.index, y=p_l, label = 'Profit or (loss)', color='green')
     elif p_l[-1] < 0:
         st.write(f"You've lost {-int(p_l[-1])} USDT in futures account")
-        fig = plt.figure(figsize=(12, 6))
+        fig = plt.figure(figsize=(12, 3))
         sns.lineplot(x=p_l.index, y=p_l, label = 'Profit or (loss)', color='red')
     else:
         st.write("You are in break even in futures account")
-        fig = plt.figure(figsize=(12, 6))
+        fig = plt.figure(figsize=(12, 3))
         sns.lineplot(x=p_l.index, y=p_l, label = 'Profit or (loss)', color='blue')
 
     st.pyplot(fig)
