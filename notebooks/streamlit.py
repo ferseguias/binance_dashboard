@@ -1,4 +1,5 @@
-from tkinter import colorchooser
+from ctypes import alignment
+from tkinter import font
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -7,6 +8,7 @@ import matplotlib.pyplot as plt
 import warnings
 warnings.filterwarnings('ignore')
 plt.style.use('dark_background')
+plt.rcParams['font.size'] = '10'
 
 #located in .py file
 #streamlit run myfile.py
@@ -24,7 +26,8 @@ df_hist_prices = pd.read_excel('../database/prices/historical_prices.xlsx')
 df_hist_prices.set_index('datetime', inplace=True)
 
 #streamlit code
-st.sidebar.title("""YOUR BINANCE ACCOUNT""")
+st.sidebar.image("../binance_image.png", use_column_width=True)
+st.sidebar.title("""YOUR BINANCE REPORT""")
 
 options = st.sidebar.selectbox("Choose your wallet", ["All accounts", "Spot", "Futures", "Card"])
 
@@ -57,8 +60,8 @@ if options == 'All accounts':
     current_balance.reset_index(inplace=True)
 
     st.write(' ### Your holdings overview')
-    st.write("Top 10 holdings by it's current value in USDT:")
-    st.table(current_balance.head(10))
+    st.write("Top 5 holdings by it's current value in USDT:")
+    st.table(current_balance.head(5))
 
     st.write(f'Current total value (all accounts): {round(current_balance["USDT_value"].sum(), 2)} USDT')
 
@@ -116,10 +119,10 @@ if options == 'All accounts':
 
 elif options == 'Spot':
 
-    spot_options = st.sidebar.selectbox("Choose report type", ["Spot overview", "Trades"])
+    spot_options = st.sidebar.selectbox("Choose report type", ["Balance overview", "Trades per coin", 'Spot value/funding history'])
 
-    if spot_options == 'Spot overview':
-
+    if spot_options == 'Balance overview':
+        st.subheader('Balance overview:')
         #spot balance per coin, enhanced with a current price in USDT
         df_spot = df.loc[df['Account'] == 'Spot']
         balance_spot = df_spot.groupby('Coin').sum()['Change']
@@ -142,11 +145,11 @@ elif options == 'Spot':
         
         col1, col2 = st.columns([2, 2])
         
-        col1.subheader("Spot balance per coin")
-        col1.write("(top 10 showed)")
+        col1.write("##### Spot balance per coin")
+        col1.write("###### (top 10 showed)")
         col1.table(balance_spot.head(10))
 
-        col2.subheader("Spot account pie chart")
+        col2.write("##### Spot account pie chart")
 
         pie = balance_spot.reset_index()
         pie['percentage'] = pie['USDT_value'] / pie['USDT_value'].sum()
@@ -156,12 +159,14 @@ elif options == 'Spot':
         others = {'Coin':'others', 'percentage': others['percentage'].sum()}
         pie = pie.append(others, ignore_index=True)
 
-        fig = plt.figure(figsize=(20, 20))
-        plt.pie(pie['percentage'], autopct='%1.1f%%', textprops={'fontsize': 35, 'fontweight': 'bold'}, startangle=90, pctdistance=1.2)
-        plt.legend(loc='upper left', labels=pie['Coin'], bbox_to_anchor=(-0.1, 1.1), fontsize=35)
+        fig = plt.figure(figsize=(5, 5))
+        plt.pie(pie['percentage'], autopct='%1.1f%%', startangle=90, pctdistance=1.2)
+        plt.legend(loc='upper left', labels=pie['Coin'], bbox_to_anchor=(-0.1, 1.1))
 
-        col2.write("(coins with less than 1.5% share is shown as 'others')")
+        col2.write("###### (coins with less than 1.5% share is shown as 'others')")
         col2.pyplot(fig)
+
+        st.write(f'Total current value in spot account: {int(balance_spot["USDT_value"].sum())} USDT')
 
         #number of total trades
         df_spot = df.loc[df['Account'] == 'Spot']
@@ -172,9 +177,8 @@ elif options == 'Spot':
         total_trades = total_trades['Operation'].sum()
         st.write(f"You've made total of {total_trades} trades in your spot account.")
     
-    elif spot_options == 'Trades':
-
-        st.write("### Trades analysis")
+    elif spot_options == 'Trades per coin':
+        st.subheader('Trades per coin')
 
         #get trade related operations
         trades = df.loc[((df['Operation'] == 'Buy')) | ((df['Operation'] == 'Sell')) | ((df['Operation'] == 'Large OTC trading')) | ((df['Operation'] == 'Small assets exchange BNB')) | ((df['Operation'] == 'Transaction Related'))]
@@ -294,6 +298,94 @@ elif options == 'Spot':
                 st.write(f'{x_axis} trading holding current value = {int(holding_value)} USDT')
                 profit_loss_trade = holding_value - trades_coin['accum_inv_USDT'].iloc[-1]
                 st.write(f'{x_axis} trading profit/(loss) = {int(profit_loss_trade)} USDT')
+    elif spot_options == 'Spot value/funding history':
+        st.subheader('Spot value/funding history')
+        st.write('This section shows monthly value in spot account vs total investment in USDT.')
+
+        df_spot = df.loc[df['Account'] == 'Spot']
+        df_spot['year_month'] = df_spot['UTC_Time'].dt.strftime('%Y-%m')
+        monthly_bal = df_spot.groupby(['year_month', 'Coin']).sum()['Change'].reset_index()
+        monthly_bal = monthly_bal.pivot(index='year_month', columns='Coin', values='Change').fillna(0)
+        monthly_bal = monthly_bal.cumsum()
+
+        #import month-end prices for all coins in USDT
+        df_hist_prices = pd.read_excel('../database/prices/historical_prices.xlsx')
+        df_hist_prices.set_index('datetime', inplace=True)
+
+        end_dates = []
+        for i in monthly_bal.index:
+            if i.split('-')[1] == '02':
+                end_dates.append(i + '-28')
+            elif i.split('-')[1] == '01' or i.split('-')[1] == '03' or i.split('-')[1] == '05' or i.split('-')[1] == '07' or i.split('-')[1] == '08' or i.split('-')[1] == '10' or i.split('-')[1] == '12':
+                end_dates.append(i + '-31')
+            else:
+                end_dates.append(i + '-30')
+        monthly_prices = df_hist_prices.loc[end_dates].reset_index()
+        monthly_prices['datetime'] = monthly_prices['datetime'].dt.strftime('%Y-%m')
+        monthly_prices.set_index('datetime', inplace=True)
+
+        #join prices and balances to get value in USDT
+        join = monthly_bal.join(monthly_prices, how='outer')
+        for i in monthly_bal.columns:
+            if i == 'USDT':
+                pass
+            else:
+                name_price = i + 'USDT'
+                join[i] = join[i] * join[name_price]
+        join.drop(monthly_prices.columns, axis=1, inplace=True)
+        join['total_value'] = join.sum(axis=1)
+        
+        investmenst = df_spot.loc[(df_spot['Operation'] == 'Deposit') | (df_spot['Operation'] == 'Withdraw') | (df_spot['Operation'] == 'transfer_in') | (df_spot['Operation'] == 'transfer_out')]
+        inv_monthly_bal = investmenst.groupby(['year_month', 'Coin']).sum()['Change'].reset_index()
+        inv_monthly_bal = inv_monthly_bal.pivot(index='year_month', columns='Coin', values='Change').fillna(0)
+        #inv_monthly_bal = inv_monthly_bal.cumsum()
+
+        col = []
+        for i in inv_monthly_bal.columns.drop('USDT'):
+            name_price = i + 'USDT'
+            col.append(name_price)
+            
+        end_dates = []
+        for i in inv_monthly_bal.index:
+            if i.split('-')[1] == '02':
+                end_dates.append(i + '-28')
+            elif i.split('-')[1] == '01' or i.split('-')[1] == '03' or i.split('-')[1] == '05' or i.split('-')[1] == '07' or i.split('-')[1] == '08' or i.split('-')[1] == '10' or i.split('-')[1] == '12':
+                end_dates.append(i + '-31')
+            else:
+                end_dates.append(i + '-30')
+        inv_monthly_prices = df_hist_prices.loc[end_dates].reset_index()
+        inv_monthly_prices['datetime'] = inv_monthly_prices['datetime'].dt.strftime('%Y-%m')
+        inv_monthly_prices.set_index('datetime', inplace=True)
+        inv_monthly_prices = inv_monthly_prices.loc[:,col]
+
+        join_inv = inv_monthly_bal.join(inv_monthly_prices, how='outer')
+        for i in inv_monthly_bal.columns:
+            if i == 'USDT':
+                pass
+            else:
+                name_price = i + 'USDT'
+                join_inv[i] = join_inv[i] * join_inv[name_price]
+        join_inv.drop(inv_monthly_prices.columns, axis=1, inplace=True)
+        join_inv['total_value'] = join_inv.sum(axis=1)
+        join_inv['total_value'] = join_inv['total_value'].cumsum()
+
+        #plot monthly balance in USDT and investment in USDT
+        fig = plt.figure(figsize=(12, 4))
+        sns.lineplot(x=join.index, y='total_value', data=join, label='spot balance in USDT')
+        sns.lineplot(x=join_inv.index, y='total_value', data=join_inv, label='total funding in USDT')
+        st.pyplot(fig)
+
+        st.write('When blue line is over the yellow line, spot account is considered in profit. When blue line cross yellow line, spot account is considered in loss.')
+
+
+
+
+
+
+
+
+
+
 
 elif options == 'Futures':
     st.write("### Futures account overview")
@@ -383,3 +475,63 @@ elif options == 'Futures':
         sns.lineplot(x=p_l.index, y=p_l, label = 'Profit or (loss)', color='blue')
 
     st.pyplot(fig)
+elif options == 'Card':
+    st.write('''### Card account overview.''')
+
+    df_card = df.loc[df['Account'] == 'Card']
+    card_balance = pd.DataFrame(df_card.groupby('Coin').sum()['Change'])
+
+    holding_prices = []
+    for i in card_balance.index:
+        if i == 'USDT':
+            holding_prices.append(1)
+        else:
+            try:
+                price = df_current_prices.loc[df_current_prices['symbol'] == (i + 'USDT')]['price'].values[0]
+                holding_prices.append(price)
+            except:
+                holding_prices.append(np.nan)
+    card_balance = pd.DataFrame(card_balance)
+    card_balance['USDT_price'] = holding_prices
+    card_balance['USDT_value'] = holding_prices * card_balance['Change']
+    print(f'current total value: {round(card_balance["USDT_value"].sum(), 2)} USDT')
+    card_balance.sort_values(by='USDT_value', ascending=False, inplace=True)
+    card_balance = card_balance.loc[card_balance['USDT_value'] > 1]
+    st.table(card_balance)
+
+
+    st.write('''### Expenses and rewards accumulated.''')
+    st.write('''Both plots, expenses and cashback are reflected in transaction coin.''')
+
+
+
+    expenses = df_card.loc[df_card['Operation'] == 'Binance Card Spending']
+    expenses['year_month'] = expenses['UTC_Time'].dt.strftime('%Y-%m')
+    expenses = expenses.pivot_table(index='year_month', columns='Coin', values='Change', aggfunc=np.sum)
+
+    rewards = df_card.loc[df_card['Operation'] == 'Card Cashback']
+    rewards['year_month'] = rewards['UTC_Time'].dt.strftime('%Y-%m')
+    rewards = rewards.pivot_table(index='year_month', columns='Coin', values='Change', aggfunc=np.sum)
+
+    fig, ax = plt.subplots(2, 1, figsize = (8,5))
+    ax = ax.flat
+    sns.lineplot(data=expenses.cumsum()*-1, ax = ax[0], legend=True, palette='GnBu_d', linewidth=3)
+    ax[0].set_title('Binance Card Spending')
+    ax[0].set_ylabel('Amount')
+    sns.lineplot(data=rewards.cumsum(), ax = ax[1], legend=True, palette='YlOrRd', linewidth=3)
+    ax[1].set_title('Card Cashback')
+    ax[1].set_ylabel('Amount')
+    plt.tight_layout()
+      
+    st.pyplot(fig)
+
+    st.write('''### Card funding transactions.''')
+    st.write('''Keep track of funding transactions, regulary the counterparty of these transfers in/out is spot account.''')
+
+    funding_card = pd.DataFrame(df_card.loc[(df_card['Operation'] == 'transfer_in') | (df_card['Operation'] == 'transfer_out')])
+    funding_card['year_month'] = funding_card['UTC_Time'].dt.strftime('%Y-%m')
+    funding_card = funding_card.groupby(['Coin', 'year_month']).sum()['Change'].reset_index()
+
+    st.table(funding_card)
+
+    st.write(f'Total net funding in card account: {int(funding_card["Change"].sum())} EUR')
