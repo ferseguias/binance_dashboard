@@ -1,16 +1,8 @@
-from os import walk
-import os
-import pandas as pd
-from pycoingecko import CoinGeckoAPI
-import datetime
-import time
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
-import warnings
-
 ######################################################################
 
+#imports
+from os import walk
+import os
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -600,3 +592,111 @@ def plot_profit_loss(p_l):
         fig7 = plt.figure(figsize=(12, 3))
         sns.lineplot(x=p_l.index, y=p_l, label = 'Profit or (loss)', color='blue')
     return fig7
+
+######################################################################
+
+#get card balances
+def card_balance(df, df_current_prices):
+    df_card = df.loc[df['Account'] == 'Card']
+    card_balance = pd.DataFrame(df_card.groupby('Coin').sum()['Change'])
+
+    holding_prices = []
+    for i in card_balance.index:
+        if i == 'USDT':
+            holding_prices.append(1)
+        else:
+            try:
+                price = df_current_prices.loc[df_current_prices['symbol'] == (i + 'USDT')]['price'].values[0]
+                holding_prices.append(price)
+            except:
+                holding_prices.append(np.nan)
+    card_balance = pd.DataFrame(card_balance)
+    card_balance['USDT_price'] = holding_prices
+    card_balance['USDT_value'] = holding_prices * card_balance['Change']
+    card_balance.sort_values(by='USDT_value', ascending=False, inplace=True)
+    card_balance = card_balance.loc[card_balance['USDT_value'] > 1]
+    return card_balance
+
+######################################################################
+
+#plot expenses and cashback
+def plot_expenses_cashback(df, df_current_prices):
+    df_card = df.loc[df['Account'] == 'Card']
+    card_balance = pd.DataFrame(df_card.groupby('Coin').sum()['Change'])
+
+    holding_prices = []
+    for i in card_balance.index:
+        if i == 'USDT':
+            holding_prices.append(1)
+        else:
+            try:
+                price = df_current_prices.loc[df_current_prices['symbol'] == (i + 'USDT')]['price'].values[0]
+                holding_prices.append(price)
+            except:
+                holding_prices.append(np.nan)
+    card_balance = pd.DataFrame(card_balance)
+    card_balance['USDT_price'] = holding_prices
+    card_balance['USDT_value'] = holding_prices * card_balance['Change']
+    
+    card_balance.sort_values(by='USDT_value', ascending=False, inplace=True)
+    card_balance = card_balance.loc[card_balance['USDT_value'] > 1]
+
+    expenses = df_card.loc[df_card['Operation'] == 'Binance Card Spending']
+    expenses['year_month'] = expenses['UTC_Time'].dt.strftime('%Y-%m')
+    expenses = expenses.pivot_table(index='year_month', columns='Coin', values='Change', aggfunc=np.sum)
+
+    rewards = df_card.loc[df_card['Operation'] == 'Card Cashback']
+    rewards['year_month'] = rewards['UTC_Time'].dt.strftime('%Y-%m')
+    rewards = rewards.pivot_table(index='year_month', columns='Coin', values='Change', aggfunc=np.sum)
+
+    fig8, ax = plt.subplots(2, 1, figsize = (8,5))
+    ax = ax.flat
+    sns.lineplot(data=expenses.cumsum()*-1, ax = ax[0], legend=True, palette='GnBu_d', linewidth=1.5)
+    ax[0].set_title('Binance Card Spending')
+    ax[0].set_ylabel('Amount')
+    sns.lineplot(data=rewards.cumsum(), ax = ax[1], legend=True, palette='YlOrRd', linewidth=1.5)
+    ax[1].set_title('Card Cashback')
+    ax[1].set_ylabel('Amount')
+    plt.tight_layout()
+    return fig8
+
+######################################################################
+
+#get funding table
+def card_funding(df):
+    df_card = df.loc[df['Account'] == 'Card']
+    funding_card = pd.DataFrame(df_card.loc[(df_card['Operation'] == 'transfer_in') | (df_card['Operation'] == 'transfer_out')])
+    funding_card['year_month'] = funding_card['UTC_Time'].dt.strftime('%Y-%m')
+    funding_card = funding_card.groupby(['Coin', 'year_month']).sum()['Change'].reset_index()
+    return funding_card
+
+######################################################################
+
+#get prices from yfinance
+@st.cache
+def load_data(ticker, START, TODAY):
+    data = yf.download(ticker, START, TODAY)
+    data.reset_index(inplace=True)
+    return data
+
+######################################################################
+
+#plot predictions
+def plot_predictions(data, period, n_weeks):
+    df_train = data[['Date','Close']]
+    df_train = df_train.rename(columns={"Date": "ds", "Close": "y"})
+
+    m = Prophet()
+    m.fit(df_train)
+    future = m.make_future_dataframe(periods=period)
+    forecast = m.predict(future)
+    
+    fig9 = plot_plotly(m, forecast, trend=True)
+    fig9.update_layout(title=f'Forecast plot for {n_weeks} weeks (fbPROPHET)', xaxis_title='Date', yaxis_title='Price')
+    fig9.update_xaxes(rangeselector_activecolor='orange')
+    fig9.update_xaxes(rangeselector_bgcolor='black')
+
+    fig10 = m.plot_components(forecast)
+    return fig9, fig10
+
+######################################################################

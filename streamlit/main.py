@@ -111,5 +111,40 @@ if gen_options == "Binance report":
             st.write(f"You've lost {-int(p_l[-1])} USDT in futures account")
         else:
             st.write("You are in break even in futures account")
-    elif options == 'Binance Card':
-        pass
+    elif options == 'Binance card':
+        st.write('''### Card account overview.''')
+        card_balance = fs.card_balance(df, df_current_prices)
+        st.write(f'current total value: {round(card_balance["USDT_value"].sum(), 2)} USDT')
+        st.table(card_balance)
+        st.write('''### Expenses and rewards accumulated.''')
+        st.write('''Both plots, expenses and cashback are reflected in transaction coin.''')
+        fig8 = fs.plot_expenses_cashback(df, df_current_prices)
+        st.pyplot(fig8)
+        st.write('''### Card funding transactions.''')
+        st.write('''Keep track of funding transactions, regulary the counterparty of these transfers in/out is spot account.''')
+        card_funding = fs.card_funding(df)
+        st.table(card_funding)
+        st.write(f'Total net funding in card account: {int(card_funding["Change"].sum())} EUR')
+if gen_options == "Predictions":
+    coins = ('- Select pair -', 'BTC-USD', 'ETH-USD', 'ADA-USD', 'SOL-USD', 'BNB-USD', 'XRP-USD', 'DOT-USD', 'DOGE-USD', 'SHIB-USD', 'AVAX-USD', 'LTC-USD', 'LINK-USD', 'XLM-USD', 'MATIC-USD')  
+    coins = sorted(coins)  
+    selected_coin = st.sidebar.selectbox("Choose a pair from the list", coins)
+    if selected_coin == '- Select pair -':
+        st.title('Crypto Forecast App') 
+        st.write('Please select a pair from the list...')
+    else:
+        n_weeks = st.sidebar.slider('Weeks of prediction:', 5, 25, 5)
+        plot_comp = st.sidebar.checkbox('Click here to plot forecast components', value=False)
+        st.title('Crypto Forecast App')
+        st.write(f'### Pair selected {selected_coin}')
+        period = n_weeks * 7
+        START = "2014-01-01"
+        TODAY = date.today().strftime("%Y-%m-%d")
+        data = fs.load_data(selected_coin, START, TODAY)
+        fig9, fig10 = fs.plot_predictions(data, period, n_weeks)
+        st.plotly_chart(fig9, use_container_width=True)
+        if plot_comp:
+            st.write(f"Forecast components for {selected_coin}")
+            st.write(fig10)
+        else:
+            pass
