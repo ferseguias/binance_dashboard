@@ -1,3 +1,5 @@
+from tkinter import Button
+from turtle import color
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -23,9 +25,9 @@ plt.rcParams['font.size'] = '10'
 #font="monospace"
 
 #imports
-df = pd.read_excel('../database/export_binance/df_new.xlsx', index_col=0)
-df_current_prices = pd.read_excel('../database/prices/current_prices.xlsx', index_col=0)
-df_hist_prices = pd.read_excel('../database/prices/historical_prices.xlsx')
+df = pd.read_excel('../database/export_binance/miguel_merged.xlsx', index_col=0)
+df_current_prices = pd.read_excel('../database/prices/current_prices_miguel.xlsx', index_col=0)
+df_hist_prices = pd.read_excel('../database/prices/historical_prices_miguel.xlsx')
 df_hist_prices.set_index('datetime', inplace=True)
 
 #streamlit code
@@ -39,7 +41,7 @@ if gen_options == "Binance report":
 
     st.sidebar.title("""YOUR BINANCE REPORT""")
 
-    options = st.sidebar.selectbox("Choose your wallet", ["All accounts", "Spot", "Futures", "Binance card"], )
+    options = st.sidebar.selectbox("Choose your wallet", ["All accounts", "Spot", "Futures", "Binance card"])
 
     st.header(gen_options + ' - ' + options)
 
@@ -582,7 +584,7 @@ if gen_options == "Predictions":
         #st.subheader('Forecast data')
         #st.write(forecast.tail())
         
-        fig1 = plot_plotly(m, forecast, trend=True, changepoints=True)
+        fig1 = plot_plotly(m, forecast)
         fig1.update_layout(title=f'Forecast plot for {n_weeks} weeks (fbPROPHET)', xaxis_title='Date', yaxis_title='Price')
         fig1.update_xaxes(rangeselector_activecolor='orange')
         fig1.update_xaxes(rangeselector_bgcolor='black')
