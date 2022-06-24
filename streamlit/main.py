@@ -26,7 +26,7 @@ df_hist_prices = pd.read_excel('../database/prices/historical_prices_1.xlsx')
 df_hist_prices.set_index('datetime', inplace=True)
 
 #streamlit code
-st.sidebar.image("../binance_image.png", use_column_width=True)
+st.sidebar.image("../images/binance_image.png", use_column_width=True)
 gen_options = st.sidebar.selectbox("What would you like to do?", ["Binance report", "Predictions"])
 if gen_options == "Binance report":
     st.sidebar.title("""YOUR BINANCE REPORT""")
@@ -157,8 +157,12 @@ if gen_options == "Predictions":
             data = fs.load_data(selected_coin, START, TODAY)
             fig9, fig10 = fs.plot_predictions(data, period, n_weeks)
             st.plotly_chart(fig9, use_container_width=True)
+            st.write('#### Plot leyend:')
+            st.write('Blue line represents predicted price')
+            st.write('Red line represents trend')
+            st.write('Black dots represents real price')
             if plot_comp:
-                st.write(f"Forecast components for {selected_coin}")
+                st.write(f"#### Forecast components for {selected_coin}")
                 st.write(fig10)
             else:
                 pass
@@ -182,8 +186,12 @@ if gen_options == "Predictions":
             data = fs.load_data(selected_coin, START, TODAY)
             fig9, fig10 = fs.plot_predictions(data, period, n_weeks)
             st.plotly_chart(fig9, use_container_width=True)
+            st.write('#### Plot leyend:')
+            st.write('Blue line represents predicted price')
+            st.write('Red line represents trend')
+            st.write('Black dots represents real price')
             if plot_comp:
-                st.write(f"Forecast components for {selected_coin}")
+                st.write(f"#### Forecast components for {selected_coin}")
                 st.write(fig10)
             else:
                 pass
