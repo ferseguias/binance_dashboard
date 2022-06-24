@@ -53,7 +53,7 @@ Check out the next section to have a better look of streamlit dashboard...
 
 # Streamlit walk around 🚶🏽‍♂️
 Click on image below to watch the video:
-[![Watch the video](https://raw.githubusercontent.com/ferseguias/final_project_ironhack/main/youtube_image.png)](https://www.youtube.com/watch?v=vvlb0zWMCUw)
+[![Watch the video](https://raw.githubusercontent.com/ferseguias/final_project_ironhack/main/images/youtube_image.png)](https://www.youtube.com/watch?v=vvlb0zWMCUw)
 
 # Scope limitations and next steps ⏭
 - Prices database used daily frequency, however, price changes every second. To obtain sharpen figures, prices database should have frequence per second.
