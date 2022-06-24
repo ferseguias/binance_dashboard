@@ -144,7 +144,6 @@ def spot_balance(df, df_current_prices):
     balance_spot = pd.DataFrame(balance_spot)
     balance_spot['USDT_price'] = holding_prices
     balance_spot['USDT_value'] = holding_prices * balance_spot['Change']
-    print(f'current total value: {round(balance_spot["USDT_value"].sum(), 2)} USDT')
     balance_spot.sort_values(by='USDT_value', ascending=False, inplace=True)
     balance_spot = balance_spot.loc[balance_spot['USDT_value'] > 1]
     return balance_spot
@@ -168,7 +167,6 @@ def plot_spot_pie(df, df_current_prices):
     balance_spot = pd.DataFrame(balance_spot)
     balance_spot['USDT_price'] = holding_prices
     balance_spot['USDT_value'] = holding_prices * balance_spot['Change']
-    print(f'current total value: {round(balance_spot["USDT_value"].sum(), 2)} USDT')
     balance_spot.sort_values(by='USDT_value', ascending=False, inplace=True)
     balance_spot = balance_spot.loc[balance_spot['USDT_value'] > 1]
     pie = balance_spot.reset_index()
@@ -329,14 +327,27 @@ def holding_value(df_current_prices, x_axis, trades_coin):
 ######################################################################
 
 #get trading profit or loss on selected coin
-def profit_loss_trade(x_axis, holding_value, trades_coin):
-    if x_axis == "WETH":
-        profit_loss_trade = holding_value - trades_coin['accum_inv_USDT'].iloc[-1]
-    elif x_axis == "USDT":
-        profit_loss_trade = holding_value - trades_coin['accum_inv_USDT'].iloc[-1]
-    else:            
-        profit_loss_trade = holding_value - trades_coin['accum_inv_USDT'].iloc[-1]
+def profit_loss_trade(holding_value, trades_coin):
+    profit_loss_trade = holding_value - trades_coin['accum_inv_USDT'].iloc[-1]
     return profit_loss_trade
+
+######################################################################
+
+#get current price on selected coin
+def current_price_coin(x_axis, df_current_prices):
+    if x_axis == 'WETH':
+        x_axis = 'ETH'
+        current_price_coin = df_current_prices.loc[df_current_prices['symbol'] == (x_axis + 'USDT'), 'price']
+    else:
+        current_price_coin = df_current_prices.loc[df_current_prices['symbol'] == (x_axis + 'USDT'), 'price']
+    return current_price_coin
+
+######################################################################
+
+#get average purchase price on selected coin
+def avg_purchase_price(trades_coin):
+    avg_purchase_price = trades_coin['accum_inv_USDT'].iloc[-1] / trades_coin['accum_balance'].iloc[-1]
+    return avg_purchase_price
 
 ######################################################################
 
@@ -515,7 +526,7 @@ def plot_futures(df, df_hist_prices):
 
 ######################################################################
 
-#get profit or loss
+#get profit or loss futures account
 def profit_loss(df, df_hist_prices):
     df_futures = df.loc[df['Account'] == 'USDT-Futures']
     df_futures['year_month'] = df_futures['UTC_Time'].dt.strftime('%Y-%m')
@@ -580,7 +591,7 @@ def profit_loss(df, df_hist_prices):
 
 ######################################################################
 
-#get profit or loss
+#get profit or loss futures account
 def plot_profit_loss(p_l):
     if p_l[-1] > 0:
         fig7 = plt.figure(figsize=(12, 3))
@@ -700,3 +711,78 @@ def plot_predictions(data, period, n_weeks):
     return fig9, fig10
 
 ######################################################################
+
+#plot predictions v2
+def plot_predictions_1(df, estimated_days):
+    df = df[['Date','Close']]
+    df = df.rename(columns={'Date': 'ds', 'Close': 'y'})
+    df = df[df['ds']>='2014-01-01']
+    df0=df.copy()
+    df = df[:-estimated_days]
+    df = df.sort_values(by=['ds'],ascending=True)
+    df_prophet = Prophet(changepoint_prior_scale=0.15,yearly_seasonality=True,daily_seasonality=True)
+    df_prophet.fit(df)
+    df_forecast = df_prophet.make_future_dataframe(periods= estimated_days*2, freq='D')
+    df_forecast = df_prophet.predict(df_forecast)
+    trace = go.Scatter(
+        name = 'Actual price',
+        mode = 'markers',
+        x = list(df_forecast['ds']),
+        y = list(df['y']),
+        marker=dict(
+            color='#FFBAD2',
+            line=dict(width=1)
+        )
+    )
+
+    trace1 = go.Scatter(
+        name = 'trend',
+        mode = 'lines',
+        x = list(df_forecast['ds']),
+        y = list(df_forecast['yhat']),
+        marker=dict(
+            color='red',
+            line=dict(width=3)
+        )
+    )
+
+    upper_band = go.Scatter(
+        name = 'upper band',
+        mode = 'lines',
+        x = list(df_forecast['ds']),
+        y = list(df_forecast['yhat_upper']),
+        line= dict(color='#57b88f'),
+        fill = 'tonexty'
+    )
+
+    lower_band = go.Scatter(
+        name= 'lower band',
+        mode = 'lines',
+        x = list(df_forecast['ds']),
+        y = list(df_forecast['yhat_lower']),
+        line= dict(color='#1705ff')
+    )
+
+    tracex = go.Scatter(
+        name = 'Actual price',
+    mode = 'markers',
+    x = list(df0['ds']),
+    y = list(df0['y']),
+    marker=dict(
+        color='white',
+        line=dict(width=2)
+    )
+    )
+
+    data = [tracex, trace1, lower_band, upper_band, trace]
+
+    layout = dict(title='Bitcoin Price Estimation Using FbProphet',
+                xaxis=dict(title = 'Dates', ticklen=2, zeroline=True))
+
+    figure=dict(data=data,layout=layout)
+
+    #plt.savefig('btc02.png')
+
+    #py.offline.iplot(figure)
+
+    return figure

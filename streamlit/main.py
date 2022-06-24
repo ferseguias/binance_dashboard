@@ -21,8 +21,8 @@ plt.rcParams['font.size'] = '10'
 
 #import data
 df = pd.read_excel('../database/export_binance/df_new.xlsx', index_col=0)
-df_current_prices = pd.read_excel('../database/prices/current_prices.xlsx', index_col=0)
-df_hist_prices = pd.read_excel('../database/prices/historical_prices.xlsx')
+df_current_prices = pd.read_excel('../database/prices/current_prices_1.xlsx', index_col=0)
+df_hist_prices = pd.read_excel('../database/prices/historical_prices_1.xlsx')
 df_hist_prices.set_index('datetime', inplace=True)
 
 #streamlit code
@@ -86,8 +86,18 @@ if gen_options == "Binance report":
                     st.table(trades_coin)
                     holding_value = fs.holding_value(df_current_prices, x_axis, trades_coin)
                     st.write(f'{x_axis} trading holding current value = {int(holding_value)} USDT')
-                    profit_loss_trade = fs.profit_loss_trade(x_axis, holding_value, trades_coin)
+                    profit_loss_trade = fs.profit_loss_trade(holding_value, trades_coin)
                     st.write(f'{x_axis} trading profit/(loss) = {int(profit_loss_trade)} USDT')
+                    accum_balance = trades_coin['accum_balance'].iloc[-1]
+                    if accum_balance == 0:
+                        pass
+                    elif accum_balance < 0:
+                        st.write('Negative accumulated balances might be possible if deposits of this coin happened. This chart only includes Buy/Sell transactions.')
+                    else:
+                        avg_purchase_price = fs.avg_purchase_price(trades_coin)
+                        st.write(f'{x_axis} average purchase price = {round(avg_purchase_price, 3)} USDT')
+                    current_price_coin = fs.current_price_coin(x_axis, df_current_prices)
+                    st.write(f'{x_axis} current price = {round(current_price_coin.values[0], 3)} USDT')
         elif spot_options == 'Spot value/funding history':
             st.subheader('Spot value/funding history')
             st.write('This section shows monthly value in spot account vs total investment in USDT.')
@@ -126,25 +136,54 @@ if gen_options == "Binance report":
         st.table(card_funding)
         st.write(f'Total net funding in card account: {int(card_funding["Change"].sum())} EUR')
 if gen_options == "Predictions":
-    coins = ('- Select pair -', 'BTC-USD', 'ETH-USD', 'ADA-USD', 'SOL-USD', 'BNB-USD', 'XRP-USD', 'DOT-USD', 'DOGE-USD', 'SHIB-USD', 'AVAX-USD', 'LTC-USD', 'LINK-USD', 'XLM-USD', 'MATIC-USD')  
-    coins = sorted(coins)  
-    selected_coin = st.sidebar.selectbox("Choose a pair from the list", coins)
-    if selected_coin == '- Select pair -':
-        st.title('Crypto Forecast App') 
-        st.write('Please select a pair from the list...')
-    else:
-        n_weeks = st.sidebar.slider('Weeks of prediction:', 5, 25, 5)
-        plot_comp = st.sidebar.checkbox('Click here to plot forecast components', value=False)
-        st.title('Crypto Forecast App')
-        st.write(f'### Pair selected {selected_coin}')
-        period = n_weeks * 7
-        START = "2014-01-01"
-        TODAY = date.today().strftime("%Y-%m-%d")
-        data = fs.load_data(selected_coin, START, TODAY)
-        fig9, fig10 = fs.plot_predictions(data, period, n_weeks)
-        st.plotly_chart(fig9, use_container_width=True)
-        if plot_comp:
-            st.write(f"Forecast components for {selected_coin}")
-            st.write(fig10)
+    prediction_kind = st.sidebar.selectbox("Choose kind of prediction", ['Long term', 'Short term'])
+    if prediction_kind == 'Long term':
+        coins = ('- Select pair -', 'BTC-USD', 'ETH-USD', 'ADA-USD', 'SOL-USD', 'BNB-USD', 'XRP-USD', 'DOT-USD', 'DOGE-USD', 'SHIB-USD', 'AVAX-USD', 'LTC-USD', 'LINK-USD', 'XLM-USD', 'MATIC-USD')  
+        coins = sorted(coins)  
+        selected_coin = st.sidebar.selectbox("Choose a pair from the list", coins)
+        if selected_coin == '- Select pair -':
+            st.title('Crypto Forecast App') 
+            st.write('Please select a pair from the list...')
+            st.write('In this section you can predict from 5 to 25 weeks, cryptocurrencies prices using fbPROPHET. Choose the kind of prediction (long/short term) to visualize predictions. The main difference is the amount of data used for training the model. Long term uses the whole data available for each coin. Short term uses recent prices (from 2020 if available).')
         else:
-            pass
+            n_weeks = st.sidebar.slider('Weeks of prediction:', 5, 25, 5)
+            plot_comp = st.sidebar.checkbox('Click here to plot forecast components', value=False)
+            st.title('Crypto Forecast App')
+            st.write(f'### Pair selected {selected_coin}')
+            st.write('Long term option selected - from 2014-01-01 if data available for selected coin')
+            period = n_weeks * 7
+            START = "2014-01-01"
+            TODAY = date.today().strftime("%Y-%m-%d")
+            data = fs.load_data(selected_coin, START, TODAY)
+            fig9, fig10 = fs.plot_predictions(data, period, n_weeks)
+            st.plotly_chart(fig9, use_container_width=True)
+            if plot_comp:
+                st.write(f"Forecast components for {selected_coin}")
+                st.write(fig10)
+            else:
+                pass
+    if prediction_kind == 'Short term':
+        coins = ('- Select pair -', 'BTC-USD', 'ETH-USD', 'ADA-USD', 'SOL-USD', 'BNB-USD', 'XRP-USD', 'DOT-USD', 'DOGE-USD', 'SHIB-USD', 'AVAX-USD', 'LTC-USD', 'LINK-USD', 'XLM-USD', 'MATIC-USD')  
+        coins = sorted(coins)  
+        selected_coin = st.sidebar.selectbox("Choose a pair from the list", coins)
+        if selected_coin == '- Select pair -':
+            st.title('Crypto Forecast App') 
+            st.write('Please select a pair from the list...')
+            st.write('In this section you can predict from 5 to 25 weeks, cryptocurrencies prices using fbPROPHET. Choose the kind of prediction (long/short term) to visualize predictions. The main difference is the amount of data used for training the model. Long term uses the whole data available for each coin. Short term uses recent prices (from 2020 if available).')
+        else:
+            n_weeks = st.sidebar.slider('Weeks of prediction:', 5, 25, 5)
+            plot_comp = st.sidebar.checkbox('Click here to plot forecast components', value=False)
+            st.title('Crypto Forecast App')
+            st.write(f'### Pair selected {selected_coin}')
+            st.write('Short term option selected - from 2020-01-01 if data available for selected coin')
+            period = n_weeks * 7
+            START = "2020-01-01"
+            TODAY = date.today().strftime("%Y-%m-%d")
+            data = fs.load_data(selected_coin, START, TODAY)
+            fig9, fig10 = fs.plot_predictions(data, period, n_weeks)
+            st.plotly_chart(fig9, use_container_width=True)
+            if plot_comp:
+                st.write(f"Forecast components for {selected_coin}")
+                st.write(fig10)
+            else:
+                pass
