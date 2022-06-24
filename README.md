@@ -79,7 +79,7 @@ Click on image below to watch the video:
 
 [fbPROPHET](https://facebook.github.io/prophet/docs/quick_start.html)
 
-# Disclaimer
+# Disclaimer 🚨
 Prediction prices should not be used as investment advice by any means.
 
 DYOR do your own research / NFA not financial advice / XD
